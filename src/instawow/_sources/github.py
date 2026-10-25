@@ -277,6 +277,20 @@ class GithubResolver(BaseResolver):
                         directory_range_response.raise_for_status()
 
                     else:
+                        # Some HTTP servers ignore Range and return the entire
+                        # ZIP with status 200 but no Content-Range. A full
+                        # response is usable; a malformed body is not.
+                        if hdrs.CONTENT_RANGE not in directory_range_response.headers:
+                            addon_zip_stream.write(await directory_range_response.read())
+                            is_zip_complete = True
+                            try:
+                                dynamic_addon_zip = zipfile.ZipFile(addon_zip_stream)
+                            except zipfile.BadZipFile:
+                                logger.warning(
+                                    f'Ignoring invalid ZIP response for {candidate["name"]}'
+                                )
+                            break
+
                         addon_zip_stream.seek(
                             extract_byte_range_offset(
                                 directory_range_response.headers[hdrs.CONTENT_RANGE]

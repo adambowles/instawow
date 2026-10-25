@@ -774,6 +774,10 @@ async def update(
         for defn, error in resolve_errors.items()
     }
 
+    # Keyed by the original CLI definition. Preserve installed strategies
+    # when no new strategies were explicitly supplied by the caller.
+    effective_defns = {original: effective for effective, original in resolve_defns.items()}
+
     updatables = {
         d: (o, n)
         for d, n in pkg_candidates.items()
@@ -783,7 +787,7 @@ async def update(
         # Explicitly changing resolver strategies must persist even when the
         # remote release version has not changed (e.g. moving from a version
         # pin to strict semantic-version selection).
-        or o.to_defn().strategies.filled != d.strategies.filled
+        or o.to_defn().strategies.filled != effective_defns[d].strategies.filled
         or not await _check_installed_pkg_integrity(config.addon_dir, o)
     }
 

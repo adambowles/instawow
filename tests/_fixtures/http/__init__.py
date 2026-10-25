@@ -127,6 +127,14 @@ ROUTES = {
             _load_json_fixture('github-release-masque.json'),
         ),
         Route(
+            r'//api\.github\.com/repositories/44074003/releases\?per_page=100',
+            _load_json_fixture('github-release-masque.json'),
+        ),
+        Route(
+            r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=100',
+            _load_json_fixture('github-release-masque.json'),
+        ),
+        Route(
             re.escape(
                 next(
                     a['url']

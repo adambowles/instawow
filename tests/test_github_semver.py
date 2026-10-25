@@ -209,6 +209,7 @@ async def test_prereleases_with_no_stable_remain_available_by_default(
 
 def test_semver_strategy_persists_in_existing_sqlite_database(tmp_path):
     import sqlite3
+    from contextlib import closing
 
     from instawow import pkg_db
 
@@ -220,13 +221,13 @@ def test_semver_strategy_persists_in_existing_sqlite_database(tmp_path):
     connection.executescript(legacy_schema)
     connection.close()
 
-    with pkg_db.prepare_database(path) as upgraded:
+    with closing(pkg_db.prepare_database(path)) as upgraded:
         columns = {
             row['name'] for row in upgraded.execute('PRAGMA table_info(pkg_options)')
         }
         assert 'semver_only' in columns
         # A second opening must not attempt the ALTER TABLE again.
-    with pkg_db.prepare_database(path) as reopened:
+    with closing(pkg_db.prepare_database(path)) as reopened:
         assert reopened.execute('PRAGMA user_version').fetchone()[0] == 1
         reopened.execute(
             "INSERT INTO pkg (source, id, slug, name, description, url, download_url, "
