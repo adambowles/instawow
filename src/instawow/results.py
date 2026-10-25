@@ -19,6 +19,11 @@ class _SuccessResult(Result[Literal['success']]):
     status = 'success'
 
 
+class PkgNoCompatibleUpdate(_SuccessResult):
+    def __str__(self) -> str:
+        return 'skipped: no compatible GitHub release; existing addon retained'
+
+
 class PkgInstalled(_SuccessResult):
     def __init__(self, pkg: pkg_models.Pkg, *, dry_run: bool = False) -> None:
         super().__init__()
@@ -123,6 +128,20 @@ class PkgFilesNotMatching(ManagerError):
 
     def __str__(self) -> str:
         return 'no files found for: ' + '; '.join(f'{s}={v!r}' for s, v in self.strategies.items())
+
+
+class PkgUnexpectedAddonFolders(ManagerError):
+    def __init__(self, old_folders: set[str], new_folders: set[str]) -> None:
+        super().__init__()
+        self.old_folders = old_folders
+        self.new_folders = new_folders
+
+    def __str__(self) -> str:
+        return (
+            'refusing to replace unrelated addon folders: '
+            f'installed {sorted(self.old_folders)!r}, downloaded {sorted(self.new_folders)!r}; '
+            'explicit version_eq override required for a deliberate replacement'
+        )
 
 
 class PkgNotInstalled(ManagerError):

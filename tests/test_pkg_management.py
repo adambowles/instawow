@@ -292,3 +292,45 @@ async def test_get_changelog_from_web_url():
             'https://api.curseforge.com/v1/mods/13592/files/6454541/changelog',
         )
     ).startswith('<h2>11.2.10</h2>')
+
+
+
+def test_github_update_refuses_unrelated_release_folders():
+    from types import SimpleNamespace
+
+    from instawow.definitions import Strategies
+    from instawow.pkg_management import _check_update_folder_identity
+    from instawow.results import PkgUnexpectedAddonFolders
+
+    installed = SimpleNamespace(folders=[SimpleNamespace(name='Polestar')])
+    defn = Defn('github', 'fitzforge/polestar')
+    with pytest.raises(PkgUnexpectedAddonFolders) as error:
+        _check_update_folder_identity(defn, installed, {'LibForeverData'})
+    assert error.value.old_folders == {'Polestar'}
+    assert error.value.new_folders == {'LibForeverData'}
+
+    # Matching folder name is safe; explicit version selection also allows a
+    # deliberate restoration of previously damaged addon files.
+    _check_update_folder_identity(defn, installed, {'Polestar'})
+    pinned = Defn(
+        'github',
+        'fitzforge/polestar',
+        strategies=Strategies({Strategy.VersionEq: 'v0.2.6'}),
+    )
+    _check_update_folder_identity(pinned, installed, {'LibForeverData'})
+
+
+async def test_github_no_compatible_update_retains_installed_addon(monkeypatch):
+    from instawow.results import PkgFilesNotMatching, PkgNoCompatibleUpdate
+
+    defn = Defn('github', 'sfx-wow/masque')
+    installed = await pkg_management.install([defn], replace_folders=False)
+    assert not isinstance(installed[defn], Exception)
+
+    async def incompatible_releases(defns, *, with_deps):
+        return {d: PkgFilesNotMatching(d.strategies) for d in defns}
+
+    monkeypatch.setattr(pkg_management, 'resolve', incompatible_releases)
+    result = (await pkg_management.update([defn]))[defn]
+    assert isinstance(result, PkgNoCompatibleUpdate)
+    assert pkg_management.get_pkgs([defn])[0] is not None

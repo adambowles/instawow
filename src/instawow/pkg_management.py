@@ -23,6 +23,8 @@ from .results import (
     PkgConflictsWithInstalled,
     PkgConflictsWithUnreconciled,
     PkgFilesNotMatching,
+    PkgNoCompatibleUpdate,
+    PkgUnexpectedAddonFolders,
     PkgInstalled,
     PkgNotInstalled,
     PkgRemoved,
@@ -507,6 +509,23 @@ def _mutate_install(
     return PkgInstalled(pkg)
 
 
+def _check_update_folder_identity(defn: Defn, old_pkg: Pkg, new_folders: set[str]) -> None:
+    """Never silently swap a GitHub addon for a different product.
+
+    ZIPs with no overlapping addon folders are particularly risky when a
+    GitHub repository publishes multiple products as separate releases.
+    Explicit version_eq overrides remain available for intentional recovery.
+    """
+    old_folders = {folder.name for folder in old_pkg.folders}
+    if (
+        defn.source == 'github'
+        and not defn.strategies[Strategy.VersionEq]
+        and old_folders
+        and old_folders.isdisjoint(new_folders)
+    ):
+        raise PkgUnexpectedAddonFolders(old_folders, new_folders)
+
+
 @resultify
 @run_in_thread
 def _mutate_update(defn: Defn, old_pkg: Pkg, pkg_candidate: PkgCandidate, archive: Path):
@@ -516,6 +535,8 @@ def _mutate_update(defn: Defn, old_pkg: Pkg, pkg_candidate: PkgCandidate, archiv
         ) as (top_level_folders, extract),
         ctx.config.database() as connection,
     ):
+        _check_update_folder_identity(defn, old_pkg, top_level_folders)
+
         installed_conflicts = connection.execute(
             f"""
             SELECT DISTINCT pkg.*
@@ -737,6 +758,21 @@ async def update(
         (resolve_defns.get(d) or d, r)
         for d, r in resolve_results.items()
     )
+    # A temporary lack of compatible GitHub assets is not a failed update
+    # when an installed copy is already present. Report the skip explicitly
+    # and continue updating the remaining addons in the profile.
+    resolve_errors = {
+        defn: (
+            PkgNoCompatibleUpdate()
+            if (
+                defn.source == 'github'
+                and defn in defns_to_pkgs
+                and isinstance(error, PkgFilesNotMatching)
+            )
+            else error
+        )
+        for defn, error in resolve_errors.items()
+    }
 
     updatables = {
         d: (o, n)
