@@ -92,7 +92,7 @@ def package_json_less_addon(
     [
         {
             rf'//api\.github\.com/repos/{zip_defn.alias}',
-            rf'//api\.github\.com/repos/{zip_defn.alias}/releases\?per_page=100',
+            rf'//api\.github\.com/repos/{zip_defn.alias}/releases\?per_page=10',
         }
     ],
     indirect=True,
@@ -165,7 +165,7 @@ async def test_nonexistent_repo(
     [
         {
             rf'//api\.github\.com/repos/{packager_test_defn.alias}',
-            rf'//api\.github\.com/repos/{packager_test_defn.alias}/releases\?per_page=100',
+            rf'//api\.github\.com/repos/{packager_test_defn.alias}/releases\?per_page=10',
         }
     ],
     indirect=True,
@@ -237,7 +237,7 @@ async def test_changelog_is_data_url(
     [
         {
             rf'//api\.github\.com/repos/{packager_test_defn.alias}',
-            rf'//api\.github\.com/repos/{packager_test_defn.alias}/releases\?per_page=100',
+            rf'//api\.github\.com/repos/{packager_test_defn.alias}/releases\?per_page=10',
         }
     ],
     indirect=True,

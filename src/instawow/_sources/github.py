@@ -487,7 +487,7 @@ class GithubResolver(BaseResolver):
             # Includes pre-releases
             release_url = (repo_url / 'releases').with_query(
                 # Default is 30 but we're more conservative
-                per_page='100'
+                per_page='100' if defn.strategies[Strategy.SemverOnly] else '10'
             )
 
         async def get_releases():

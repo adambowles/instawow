@@ -167,7 +167,7 @@ async def test_nonsemver_addons_retain_upstream_resolution(
         make_release('10.1.0'),
     ]
     iw_add_routes(Route(
-        r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=100',
+        r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=10',
         releases,
     ))
     resolver = GithubResolver()
@@ -193,7 +193,7 @@ async def test_prereleases_with_no_stable_remain_available_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ):
     iw_add_routes(Route(
-        r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=100',
+        r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=10',
         [make_release('spoken/v3.6.0-alpha.1', prerelease=True)],
     ))
     resolver = GithubResolver()
