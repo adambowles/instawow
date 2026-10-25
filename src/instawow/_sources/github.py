@@ -4,7 +4,6 @@ import asyncio
 import re
 from datetime import datetime, timedelta
 from enum import StrEnum
-from functools import partial
 from itertools import batched, tee, zip_longest
 from typing import Any, Literal
 
@@ -450,13 +449,19 @@ class GithubResolver(BaseResolver):
             (a for a in assets if a['name'] == 'release.json' and a['state'] == 'uploaded'),
             None,
         )
-        matcher = (
-            partial(self.__find_match_from_release_json, assets, release_json)
-            if release_json
-            else partial(self.__find_match_from_zip_contents, assets)
-        )
         for desired_flavour in desired_flavours:
-            asset = await matcher(desired_flavour)
+            # Packager metadata can omit newer WoW flavours such as Forever
+            # even when a ZIP contains an explicitly compatible .toc.
+            if release_json:
+                asset = await self.__find_match_from_release_json(
+                    assets, release_json, desired_flavour
+                )
+                if asset:
+                    return (release, asset)
+
+            # Inspect the actual archive if release.json was absent or could
+            # not identify a compatible file; never install an unverified ZIP.
+            asset = await self.__find_match_from_zip_contents(assets, desired_flavour)
             if asset:
                 return (release, asset)
 

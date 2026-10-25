@@ -293,3 +293,79 @@ def test_can_extract_alias_from_url(
     extracted_alias: str,
 ):
     assert github_resolver.get_alias_from_url(url) == extracted_alias
+
+
+
+async def test_missing_forever_release_json_metadata_falls_back_to_zip(
+    github_resolver: GithubResolver,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    json_asset = {
+        'name': 'release.json', 'state': 'uploaded', 'content_type': 'application/json',
+        'url': 'https://api.github.com/releases/assets/1',
+    }
+    zip_asset = {
+        'name': 'WhatsTraining-11.0.0-beta25.zip', 'state': 'uploaded',
+        'content_type': 'application/zip',
+        'url': 'https://api.github.com/releases/assets/2',
+    }
+    release = {'assets': [json_asset, zip_asset], 'tag_name': '11.0.0-beta25'}
+    checks = []
+
+    async def missing_json_match(assets, release_json, desired_flavour):
+        checks.append('release_json')
+        assert desired_flavour is Flavour.ForeverClassic
+        return None
+
+    async def matching_zip_toc(assets, desired_flavour):
+        checks.append('zip_toc')
+        assert desired_flavour is Flavour.ForeverClassic
+        return zip_asset
+
+    monkeypatch.setattr(
+        github_resolver, '_GithubResolver__find_match_from_release_json',
+        missing_json_match,
+    )
+    monkeypatch.setattr(
+        github_resolver, '_GithubResolver__find_match_from_zip_contents',
+        matching_zip_toc,
+    )
+    result = await github_resolver._GithubResolver__find_match(
+        release, (Flavour.ForeverClassic,)
+    )
+    assert result == (release, zip_asset)
+    assert checks == ['release_json', 'zip_toc']
+
+
+async def test_matching_release_json_does_not_redownload_zip_metadata(
+    github_resolver: GithubResolver,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    json_asset = {
+        'name': 'release.json', 'state': 'uploaded', 'content_type': 'application/json',
+        'url': 'https://api.github.com/releases/assets/1',
+    }
+    zip_asset = {
+        'name': 'WhatsTraining-11.0.0-beta25.zip', 'state': 'uploaded',
+        'content_type': 'application/zip',
+        'url': 'https://api.github.com/releases/assets/2',
+    }
+    release = {'assets': [json_asset, zip_asset], 'tag_name': '11.0.0-beta25'}
+
+    async def matching_json(assets, release_json, desired_flavour):
+        return zip_asset
+
+    async def unexpected_zip_inspection(assets, desired_flavour):
+        raise AssertionError('A matching release.json should be sufficient')
+
+    monkeypatch.setattr(
+        github_resolver, '_GithubResolver__find_match_from_release_json',
+        matching_json,
+    )
+    monkeypatch.setattr(
+        github_resolver, '_GithubResolver__find_match_from_zip_contents',
+        unexpected_zip_inspection,
+    )
+    assert await github_resolver._GithubResolver__find_match(
+        release, (Flavour.ForeverClassic,)
+    ) == (release, zip_asset)
