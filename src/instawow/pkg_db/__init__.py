@@ -39,6 +39,7 @@ CREATE TABLE pkg_options (
     any_flavour BOOLEAN NOT NULL,
     any_release_type BOOLEAN NOT NULL,
     version_eq BOOLEAN NOT NULL,
+    semver_only BOOLEAN NOT NULL DEFAULT 0,
     pkg_source VARCHAR NOT NULL,
     pkg_id VARCHAR NOT NULL,
     PRIMARY KEY (pkg_source, pkg_id),
@@ -135,6 +136,15 @@ def prepare_database(path: os.PathLike[str]) -> Connection:
         _migrate(connection, current_version, _VERSION)
     elif current_version is None:
         _create(connection)
+
+    # Additive, backward-compatible column for the fork-specific GitHub option.
+    # Keep user_version unchanged so upstream instawow can still read this DB.
+    # Official builds ignore the extra column; the DEFAULT handles their inserts.
+    columns = {row['name'] for row in connection.execute('PRAGMA table_info(pkg_options)')}
+    if 'semver_only' not in columns:
+        connection.execute(
+            'ALTER TABLE pkg_options ADD COLUMN semver_only BOOLEAN NOT NULL DEFAULT 0'
+        )
 
     return connection
 

@@ -204,3 +204,47 @@ async def test_prereleases_with_no_stable_remain_available_by_default(
     monkeypatch.setattr(resolver, '_GithubResolver__find_match', fake_find_match)
     result = await resolver.resolve_one(Defn('github', 'SFX-WoW/Masque'), None)
     assert result['version'] == 'spoken/v3.6.0-alpha.1'
+
+
+
+def test_semver_strategy_persists_in_existing_sqlite_database(tmp_path):
+    import sqlite3
+
+    from instawow import pkg_db
+
+    path = tmp_path / 'legacy.sqlite'
+    legacy_schema = pkg_db._SCHEMA.replace(
+        '    semver_only BOOLEAN NOT NULL DEFAULT 0,\n', ''
+    )
+    connection = sqlite3.connect(path)
+    connection.executescript(legacy_schema)
+    connection.close()
+
+    with pkg_db.prepare_database(path) as upgraded:
+        columns = {
+            row['name'] for row in upgraded.execute('PRAGMA table_info(pkg_options)')
+        }
+        assert 'semver_only' in columns
+        # A second opening must not attempt the ALTER TABLE again.
+    with pkg_db.prepare_database(path) as reopened:
+        assert reopened.execute('PRAGMA user_version').fetchone()[0] == 1
+        reopened.execute(
+            "INSERT INTO pkg (source, id, slug, name, description, url, download_url, "
+            "date_published, version, changelog_url) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ('github', '123', 'test/repo', 'Test', '', '', '',
+             '2026-10-25 00:00:00', 'v0.2.6', ''),
+        )
+        reopened.execute(
+            "INSERT INTO pkg_options (any_flavour, any_release_type, version_eq, "
+            "pkg_source, pkg_id) VALUES (0, 0, 1, 'github', '123')"
+        )
+        assert reopened.execute(
+            "SELECT semver_only FROM pkg_options WHERE pkg_id = '123'"
+        ).fetchone()[0] == 0
+        reopened.execute(
+            "UPDATE pkg_options SET semver_only = 1 WHERE pkg_id = '123'"
+        )
+        assert reopened.execute(
+            "SELECT semver_only FROM pkg_options WHERE pkg_id = '123'"
+        ).fetchone()[0] == 1

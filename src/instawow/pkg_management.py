@@ -103,7 +103,7 @@ def build_pkg_from_row_mapping(connection: Connection, row_mapping: Row) -> Pkg:
             **row_mapping,
             'options': connection.execute(
                 """
-                SELECT any_flavour, any_release_type, version_eq
+                SELECT any_flavour, any_release_type, version_eq, semver_only
                 FROM pkg_options
                 WHERE pkg_source = :pkg_source AND pkg_id = :pkg_id
                 """,
@@ -268,6 +268,7 @@ def _insert_pkg(pkg: Pkg, connection: Connection) -> None:
             any_flavour,
             any_release_type,
             version_eq,
+            semver_only,
             pkg_source,
             pkg_id
         )
@@ -275,6 +276,7 @@ def _insert_pkg(pkg: Pkg, connection: Connection) -> None:
             :any_flavour,
             :any_release_type,
             :version_eq,
+            :semver_only,
             :pkg_source,
             :pkg_id
         )

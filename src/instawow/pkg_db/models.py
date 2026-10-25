@@ -39,6 +39,7 @@ class PkgOptions:
     any_flavour: bool
     any_release_type: bool
     version_eq: bool
+    semver_only: bool
 
 
 @frozen(kw_only=True)
