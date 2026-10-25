@@ -103,7 +103,7 @@ ROUTES = {
             _load_json_fixture('github-repo-release-json.json'),
         ),
         Route(
-            r'//api\.github\.com/repos/nebularg/PackagerTest/releases\?per_page=10',
+            r'//api\.github\.com/repos/nebularg/PackagerTest/releases\?per_page=100',
             _load_json_fixture('github-release-release-json.json'),
         ),
         Route(
@@ -119,11 +119,11 @@ ROUTES = {
             _load_json_fixture('github-repo-masque.json'),
         ),
         Route(
-            r'//api\.github\.com/repositories/44074003/releases\?per_page=10',
+            r'//api\.github\.com/repositories/44074003/releases\?per_page=100',
             _load_json_fixture('github-release-masque.json'),
         ),
         Route(
-            r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=10',
+            r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=100',
             _load_json_fixture('github-release-masque.json'),
         ),
         Route(
@@ -143,7 +143,7 @@ ROUTES = {
             _load_json_fixture('github-repo-no-releases.json'),
         ),
         Route(
-            r'//api\.github\.com/repos/AdiAddons/AdiBags/releases\?per_page=10',
+            r'//api\.github\.com/repos/AdiAddons/AdiBags/releases\?per_page=100',
             lambda: Response(body=b'', status=404),
         ),
         Route(
@@ -173,7 +173,7 @@ ROUTES = {
             _load_json_fixture('github-repo-no-release-json.json'),
         ),
         Route(
-            r'//api\.github\.com/repos/28/NoteworthyII/releases\?per_page=10',
+            r'//api\.github\.com/repos/28/NoteworthyII/releases\?per_page=100',
             _load_json_fixture('github-release-no-release-json.json'),
         ),
     )

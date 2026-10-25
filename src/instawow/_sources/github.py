@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timedelta
 from enum import StrEnum
 from functools import partial
@@ -46,7 +47,7 @@ class _GithubRelease(TypedDict):
     tag_name: str  # Hopefully the version
     published_at: str  # ISO datetime
     assets: list[_GithubRelease_Asset]
-    body: str
+    body: str | None
     draft: bool
     prerelease: bool
 
@@ -84,6 +85,69 @@ class _PackagerReleaseJsonFlavor(StrEnum):
     TitanClassic = 'titan'
     CataClassic = 'cata'
     MistsClassic = 'mists'
+
+
+# GitHub repositories may publish unrelated binaries or data packs as separate
+# releases. Only SemVer 2.0 tags (with an optional conventional "v" prefix)
+# are eligible to replace an installed add-on. Build metadata does not
+# participate in version precedence.
+_SEMVER_TAG = re.compile(
+    r'v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+    r'(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?'
+    r'(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?'
+)
+
+
+def _semver_key(
+    tag: str,
+) -> tuple[int, int, int, int, tuple[tuple[int, int | str], ...]] | None:
+    match = _SEMVER_TAG.fullmatch(tag)
+    if match is None:
+        return None
+
+    major, minor, patch = (int(match.group(i)) for i in (1, 2, 3))
+    prerelease = match.group(4)
+    if prerelease is None:
+        return (major, minor, patch, 1, ())
+
+    identifiers = prerelease.split('.')
+    # SemVer forbids leading zeros in *numeric* prerelease identifiers.
+    if any(
+        identifier.isdecimal() and len(identifier) > 1 and identifier[0] == '0'
+        for identifier in identifiers
+    ):
+        return None
+
+    precedence = tuple(
+        (0, int(identifier)) if identifier.isdecimal() else (1, identifier)
+        for identifier in identifiers
+    )
+    return (major, minor, patch, 0, precedence)
+
+
+def _select_semver_releases(
+    releases: list[_GithubRelease],
+    *,
+    include_prereleases: bool,
+) -> list[_GithubRelease]:
+    candidates = []
+    for release in releases:
+        if release['draft']:
+            continue
+
+        version = _semver_key(release['tag_name'])
+        if version is None:
+            logger.debug(f'Skipping non-SemVer GitHub release: {release["tag_name"]}')
+            continue
+        if not include_prereleases and (release['prerelease'] or version[3] == 0):
+            continue
+
+        candidates.append((version, release))
+
+    # GitHub's release ordering is based on publication chronology, not
+    # version precedence. Never let an older release supersede a newer one.
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [release for _, release in candidates]
 
 
 class GithubResolver(BaseResolver):
@@ -422,7 +486,7 @@ class GithubResolver(BaseResolver):
             # Includes pre-releases
             release_url = (repo_url / 'releases').with_query(
                 # Default is 30 but we're more conservative
-                per_page='10'
+                per_page='100'
             )
 
         async def get_releases():
@@ -445,17 +509,14 @@ class GithubResolver(BaseResolver):
             await cancel_tasks([releases_coro])
             raise
 
-        # Only users with push access will get draft releases
-        # but let's filter them out just in case.
-        releases = [r for r in await releases_coro if r['draft'] is False]
-
-        # Allow pre-releases only if no stable releases exist or explicitly opted into.
-        if not defn.strategies[Strategy.AnyReleaseType] and any(
-            r['prerelease'] is False for r in releases
-        ):
-            releases = (r for r in releases if r['prerelease'] is False)
-
-        releases = iter(releases)
+        # Ignore non-semantic release tags before examining any download asset.
+        # Prereleases require explicit opt-in, even if no stable tag exists.
+        releases = iter(
+            _select_semver_releases(
+                await releases_coro,
+                include_prereleases=bool(defn.strategies[Strategy.AnyReleaseType]),
+            )
+        )
         first_release = next(releases, None)
         if first_release is None:
             raise PkgFilesNotMatching(defn.strategies)
@@ -503,7 +564,7 @@ class GithubResolver(BaseResolver):
             download_url=asset['url'],
             date_published=datetime.fromisoformat(release['published_at']),
             version=release['tag_name'],
-            changelog_url=as_plain_text_data_url(release['body']),
+            changelog_url=as_plain_text_data_url(release['body'] or ''),
         )
 
     async def catalogue(self):
