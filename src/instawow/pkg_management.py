@@ -744,6 +744,10 @@ async def update(
         for o in (defns_to_pkgs.get(d),)
         if not o
         or o.version != n['version']
+        # Explicitly changing resolver strategies must persist even when the
+        # remote release version has not changed (e.g. moving from a version
+        # pin to strict semantic-version selection).
+        or o.to_defn().strategies.filled != d.strategies.filled
         or not await _check_installed_pkg_integrity(config.addon_dir, o)
     }
 

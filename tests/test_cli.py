@@ -609,3 +609,18 @@ def test_opt_in_semver_github_strategy():
     )
     assert defn.strategies[Strategy.SemverOnly] is True
     assert defn.strategies[Strategy.VersionEq] is None
+
+
+
+def test_update_persists_semver_strategy_without_release_change():
+    result = run('install github:sfx-wow/masque')
+    assert result.exit_code == 0, result.output
+
+    result = run('update github:sfx-wow/masque#semver_only')
+    assert result.exit_code == 0, result.output
+    assert "semver_only=True" in result.output
+
+    # Subsequent runs must read the option from SQLite, not the CLI fragment.
+    result = run('update github:sfx-wow/masque')
+    assert result.exit_code == 1
+    assert 'package is up to date' in result.output
