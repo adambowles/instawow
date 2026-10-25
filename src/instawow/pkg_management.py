@@ -730,7 +730,7 @@ async def update(
     defns: Sequence[Defn] | Literal['all'],
     *,
     dry_run: bool = False,
-) -> Mapping[Defn, AnyResult[PkgInstalled | PkgUpdated]]:
+) -> Mapping[Defn, AnyResult[PkgInstalled | PkgUpdated | PkgNoCompatibleUpdate]]:
     "Update installed packages from a definition list."
 
     config = ctx.config.config()
