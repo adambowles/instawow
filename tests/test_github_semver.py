@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from instawow._sources.github import GithubResolver, _select_semver_releases, _semver_key
-from instawow.definitions import Defn
+from instawow.definitions import Defn, Strategies, Strategy
 from instawow.results import PkgFilesNotMatching
 from ._fixtures.http import AddRoutes, Route
 
@@ -103,7 +103,10 @@ async def test_resolver_skips_polestar_auxiliary_releases(
         return release, release['assets'][0]
 
     monkeypatch.setattr(resolver, '_GithubResolver__find_match', fake_find_match)
-    result = await resolver.resolve_one(Defn('github', 'SFX-WoW/Masque'), None)
+    result = await resolver.resolve_one(Defn(
+        'github', 'SFX-WoW/Masque',
+        strategies=Strategies({Strategy.SemverOnly: True}),
+    ), None)
     assert examined == ['v0.2.6']
     assert result['version'] == 'v0.2.6'
     assert result['changelog_url'] == 'data:,'
@@ -129,4 +132,75 @@ async def test_resolver_fails_closed_if_only_invalid_versions(
 
     monkeypatch.setattr(resolver, '_GithubResolver__find_match', should_not_inspect_assets)
     with pytest.raises(PkgFilesNotMatching):
-        await resolver.resolve_one(Defn('github', 'SFX-WoW/Masque'), None)
+        await resolver.resolve_one(Defn(
+            'github', 'SFX-WoW/Masque',
+            strategies=Strategies({Strategy.SemverOnly: True}),
+        ), None)
+
+
+
+def test_semver_strategy_uri_roundtrip():
+    defn = Defn.from_uri(
+        'github:fitzforge/polestar#semver_only',
+        known_sources={'github'},
+        retain_unknown_source=False,
+    )
+    assert defn.strategies[Strategy.SemverOnly] is True
+    assert defn.strategies[Strategy.VersionEq] is None
+    assert defn.as_uri(include_strategies=True) == 'github:fitzforge/polestar#semver_only'
+
+
+@pytest.mark.parametrize(
+    '_iw_mock_aiohttp_requests',
+    [{r'//api\.github\.com/repos/SFX-WoW/Masque'}],
+    indirect=True,
+)
+async def test_nonsemver_addons_retain_upstream_resolution(
+    iw_add_routes: AddRoutes,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # Typical release tags observed on three different WoW addon projects.
+    releases = [
+        make_release('Pawn-2.14.0'),
+        make_release('spoken/v3.5.1'),
+        make_release('11.0.0-beta25', prerelease=True),
+        make_release('10.1.0'),
+    ]
+    iw_add_routes(Route(
+        r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=100',
+        releases,
+    ))
+    resolver = GithubResolver()
+    seen = []
+
+    async def fake_find_match(release, desired_flavours):
+        seen.append(release['tag_name'])
+        return release, release['assets'][0]
+
+    monkeypatch.setattr(resolver, '_GithubResolver__find_match', fake_find_match)
+    result = await resolver.resolve_one(Defn('github', 'SFX-WoW/Masque'), None)
+    assert result['version'] == 'Pawn-2.14.0'
+    assert seen == ['Pawn-2.14.0']
+
+
+@pytest.mark.parametrize(
+    '_iw_mock_aiohttp_requests',
+    [{r'//api\.github\.com/repos/SFX-WoW/Masque'}],
+    indirect=True,
+)
+async def test_prereleases_with_no_stable_remain_available_by_default(
+    iw_add_routes: AddRoutes,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    iw_add_routes(Route(
+        r'//api\.github\.com/repos/SFX-WoW/Masque/releases\?per_page=100',
+        [make_release('spoken/v3.6.0-alpha.1', prerelease=True)],
+    ))
+    resolver = GithubResolver()
+
+    async def fake_find_match(release, desired_flavours):
+        return release, release['assets'][0]
+
+    monkeypatch.setattr(resolver, '_GithubResolver__find_match', fake_find_match)
+    result = await resolver.resolve_one(Defn('github', 'SFX-WoW/Masque'), None)
+    assert result['version'] == 'spoken/v3.6.0-alpha.1'

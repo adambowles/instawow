@@ -596,3 +596,16 @@ def test_clear_cache(
     assert iw_profile_config.global_config.dirs.cache.is_dir()
     assert run('cache clear').exit_code == 0
     assert not iw_profile_config.global_config.dirs.cache.is_dir()
+
+
+
+def test_opt_in_semver_github_strategy():
+    from instawow.definitions import Defn, Strategy
+
+    defn = Defn.from_uri(
+        'github:fitzforge/polestar#semver_only',
+        known_sources={'github'},
+        retain_unknown_source=False,
+    )
+    assert defn.strategies[Strategy.SemverOnly] is True
+    assert defn.strategies[Strategy.VersionEq] is None

@@ -87,10 +87,10 @@ class _PackagerReleaseJsonFlavor(StrEnum):
     MistsClassic = 'mists'
 
 
-# GitHub repositories may publish unrelated binaries or data packs as separate
-# releases. Only SemVer 2.0 tags (with an optional conventional "v" prefix)
-# are eligible to replace an installed add-on. Build metadata does not
-# participate in version precedence.
+# Opt-in SemVer 2.0 filtering for repositories that publish unrelated releases
+# (for example, Polestar's LibForeverData alongside the Polestar addon).
+# Non-opted-in GitHub addons retain the upstream release-selection behaviour.
+# Build metadata does not participate in version precedence.
 _SEMVER_TAG = re.compile(
     r'v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
     r'(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?'
@@ -158,6 +158,7 @@ class GithubResolver(BaseResolver):
             {
                 Strategy.AnyFlavour,
                 Strategy.AnyReleaseType,
+                Strategy.SemverOnly,
                 Strategy.VersionEq,
             }
         ),
@@ -509,14 +510,24 @@ class GithubResolver(BaseResolver):
             await cancel_tasks([releases_coro])
             raise
 
-        # Ignore non-semantic release tags before examining any download asset.
-        # Prereleases require explicit opt-in, even if no stable tag exists.
-        releases = iter(
-            _select_semver_releases(
-                await releases_coro,
+        releases_list = await releases_coro
+        if defn.strategies[Strategy.SemverOnly]:
+            # A selected addon can use strict SemVer tags to avoid accidentally
+            # installing a different product published by the same GitHub repo.
+            releases_list = _select_semver_releases(
+                releases_list,
                 include_prereleases=bool(defn.strategies[Strategy.AnyReleaseType]),
             )
-        )
+        else:
+            # Preserve upstream behaviour for addons using project-prefixed
+            # versions (e.g. "Pawn-2.14.0" or "spoken/v3.5.1").
+            releases_list = [r for r in releases_list if not r['draft']]
+            if not defn.strategies[Strategy.AnyReleaseType] and any(
+                r['prerelease'] is False for r in releases_list
+            ):
+                releases_list = [r for r in releases_list if r['prerelease'] is False]
+
+        releases = iter(releases_list)
         first_release = next(releases, None)
         if first_release is None:
             raise PkgFilesNotMatching(defn.strategies)

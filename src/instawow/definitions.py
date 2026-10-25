@@ -13,6 +13,7 @@ from ._utils.attrs import EvolveIdent, evolve, fauxfrozen
 class Strategy(StrEnum):
     AnyFlavour = 'any_flavour'
     AnyReleaseType = 'any_release_type'
+    SemverOnly = 'semver_only'
     VersionEq = 'version_eq'
 
 
@@ -44,6 +45,8 @@ class Strategies(Mapping[Strategy, object], Hashable):
     def __getitem__(self, key: Literal[Strategy.AnyReleaseType], /) -> Literal[True] | None: ...
     @overload
     def __getitem__(self, key: Literal[Strategy.VersionEq], /) -> str | None: ...
+    @overload
+    def __getitem__(self, key: Literal[Strategy.SemverOnly], /) -> Literal[True] | None: ...
     @overload
     def __getitem__(self, key: Strategy, /) -> object: ...
     def __getitem__(self, key: Strategy, /):
@@ -117,6 +120,7 @@ class Defn:
                         Strategy.AnyReleaseType: Strategy.AnyReleaseType in strategy_values
                         or None,
                         Strategy.VersionEq: strategy_values.get(Strategy.VersionEq),
+                        Strategy.SemverOnly: Strategy.SemverOnly in strategy_values or None,
                     }
                 ),
             )
